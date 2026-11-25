@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Memory Nebula",
+    "description": "Turns your DSH conversation history into a rotatable galaxy, and lets the assistant search it back and read the originals.",
+    "detail": "docs/DETAIL.md"
+  }
+}

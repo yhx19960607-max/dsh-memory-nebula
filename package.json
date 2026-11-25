@@ -1,0 +1,55 @@
+{
+  "name": "dsh-memory-nebula",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "记忆星穹：把 DSH 的历史对话铺成一张可旋转的银河星图，并且能被助手搜回、读回。",
+  "license": "MIT",
+  "author": "yhx19960607-max",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "memory",
+    "visualization",
+    "canvas"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yhx19960607-max/dsh-memory-nebula.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yhx19960607-max/dsh-memory-nebula/issues"
+  },
+  "homepage": "https://github.com/yhx19960607-max/dsh-memory-nebula#readme",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node tests/selftest.mjs"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+    }
+  }
+}

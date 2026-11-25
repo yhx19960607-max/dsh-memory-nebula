@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+*.tgz
+.dsh/
+
+# 这张原始截图里有个人会话内容，只留在本地，不进仓库
+docs/screenshot.png
