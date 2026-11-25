@@ -60,7 +60,13 @@ export function apply(ctx) {
 
     if (method === 'GET' && route === '/graph') {
       await indexer.ensureFresh(600000).catch(() => {})
-      return sendJson(res, 200, { ok: true, ...indexer.graph() })
+      let workspaces = []
+      try {
+        const raw = JSON.parse(url.searchParams.get('ws') || '[]')
+        if (Array.isArray(raw)) workspaces = raw.filter((x) => typeof x === 'string' && x)
+      } catch { /* 参数坏了就按全选 */ }
+      const limitCount = Math.max(0, Number(url.searchParams.get('limit')) || 0)
+      return sendJson(res, 200, { ok: true, ...indexer.graph({ limit: limitCount, workspaces }) })
     }
     if (method === 'GET' && route === '/status') {
       return sendJson(res, 200, {

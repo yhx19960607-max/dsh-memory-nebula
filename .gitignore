@@ -4,5 +4,7 @@ node_modules/
 *.tgz
 .dsh/
 
-# 这张原始截图里有个人会话内容，只留在本地，不进仓库
+# 以下原始截图里带个人会话内容，只留在本地，不进仓库
 docs/screenshot.png
+docs/detail.png
+docs/brain.png
