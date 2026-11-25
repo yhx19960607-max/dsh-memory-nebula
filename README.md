@@ -72,6 +72,7 @@ dsh plugin add link:/解压出来的路径/dsh-memory-nebula
 
 ## 数据与隐私
 
+- 接口只接受同源请求（或页面注入的 token），本机其他脚本用 curl 直接读不到记忆。
 - 读取：`~/.dsh/sessions/**/session.v4.jsonl.zstd`（只读）
 - 写入：`~/.dsh/memory-nebula/`（索引缓存与手写记忆）
 - 插件自身不发起任何网络请求，不上传任何内容。HTTP 接口只接受本机 `127.0.0.1` 请求。

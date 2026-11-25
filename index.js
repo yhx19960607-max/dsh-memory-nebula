@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
@@ -7,6 +8,8 @@ export const name = 'memory-nebula'
 export const inject = ['webServer', 'tools']
 
 const API_PATH = '/api/memory-nebula'
+/** 每次加载插件生成一次，注入页面；同源浏览器请求可用。 */
+const TOKEN = randomBytes(16).toString('hex')
 const STORE = () => path.join(homedir(), '.dsh', 'memory-nebula')
 const SESSIONS = () => path.join(homedir(), '.dsh', 'sessions')
 
@@ -27,6 +30,16 @@ function sendJson(res, code, payload) {
   res.end(body)
 }
 
+/** token 或浏览器的同源请求才放行，挡住随手 curl / 本机脚本。 */
+function authorized(req, res) {
+  const token = req.headers['x-mn-token']
+  if (typeof token === 'string' && token.length > 0 && token === TOKEN) return true
+  const site = String(req.headers['sec-fetch-site'] || '')
+  if (site === 'same-origin') return true
+  sendJson(res, 401, { ok: false, error: '需要同源访问（或 X-MN-Token）' })
+  return false
+}
+
 function localOnly(req, res) {
   const host = String(req.headers.host || '')
   const addr = String(req.socket?.remoteAddress || '')
@@ -44,6 +57,15 @@ export function apply(ctx) {
   indexer.load()
     .then(() => indexer.rebuild())
     .catch((err) => log('首次索引失败：', errText(err)))
+
+  try {
+    ctx.effect(() => ctx.on('webserver/index-inject', (table) => {
+      if (!Array.isArray(table)) return
+      table.push({ kind: 'global', name: '__MEMORY_NEBULA_TOKEN__', value: TOKEN })
+    }), 'memory-nebula: token 注入')
+  } catch (err) {
+    log('token 注入没挂上（同源请求仍可用）：', errText(err))
+  }
 
   // 每 10 分钟打一次增量，让正在聊的会话也慢慢亮起来
   try {
@@ -126,6 +148,7 @@ export function apply(ctx) {
       path: API_PATH,
       handler: async (req, res) => {
         if (!localOnly(req, res)) return
+        if (!authorized(req, res)) return
         try {
           await handle(req, res, new URL(req.url || '/', 'http://127.0.0.1'))
         } catch (err) {
@@ -155,6 +178,7 @@ export function apply(ctx) {
       },
       output: textOutput,
       async execute(args) {
+        await indexer.ensureFresh(5 * 60 * 1000).catch(() => {})
         const hits = indexer.search(String(args.query || ''), {
           limit: Math.max(1, Math.min(30, Number(args.limit) || 8)),
           sid: String(args.session || ''),
@@ -184,6 +208,7 @@ export function apply(ctx) {
       },
       output: textOutput,
       async execute(args) {
+        await indexer.ensureFresh(5 * 60 * 1000).catch(() => {})
         const limit = Math.max(1, Math.min(60, Number(args.limit) || 20))
         if (args.id) {
           const mem = indexer.memories.find((m) => m.id === String(args.id))

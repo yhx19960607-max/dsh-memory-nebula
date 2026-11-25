@@ -9,6 +9,7 @@ window.__ModuleLoader__.load({
     const useMemo = React.useMemo
 
     const API = '/api/memory-nebula'
+    const TOKEN = (typeof window !== 'undefined' && window.__MEMORY_NEBULA_TOKEN__) || ''
 
     /* ============================================================== 样式 ==== */
 
@@ -127,6 +128,10 @@ window.__ModuleLoader__.load({
 .mn-chip:hover { border-color:rgba(120,200,255,.45); color:#dff3ff; }
 .mn-chip.on { border-color:rgba(255,205,110,.55); color:#ffe1a8; background:rgba(84,58,16,.32); }
 .mn-settings .foot { display:flex; gap:8px; margin-top:18px; }
+.mn-crash { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; padding:40px; text-align:center; background:#05070d; color:#cfe2f3; }
+.mn-crash .t { font-size:14px; color:#ffb9a6; letter-spacing:.06em; }
+.mn-crash .b { max-width:540px; font-size:11.5px; line-height:1.75; color:#8aa6bf; white-space:pre-wrap; word-break:break-word; }
 .mn-spin { display:inline-block; width:12px; height:12px; border:1.5px solid rgba(140,210,255,.25); border-top-color:#8fd8ff;
   border-radius:50%; animation:mnspin .8s linear infinite; vertical-align:-1px; margin-right:6px; }
 @keyframes mnspin { to { transform:rotate(360deg); } }
@@ -393,7 +398,6 @@ window.__ModuleLoader__.load({
           const link = pool[Math.floor(Math.random() * pool.length)]
           this.meteors.push({ link, t: Math.random(), speed: 0.12 + Math.random() * 0.3, phase: Math.random() * 10 })
         }
-        this.stats = g.stats || {}
       }
 
       setOptions(next) {
@@ -598,7 +602,7 @@ window.__ModuleLoader__.load({
       reset() {
         this.rx = -0.3
         this.ry = 0.35
-        this.targetZoom = 1.05
+        this.targetZoom = 0.95
         this.selected = null
         this.highlight.clear()
       }
@@ -652,7 +656,7 @@ window.__ModuleLoader__.load({
           const hit = this.pick(e.clientX, e.clientY)
           if (this.onSelect) this.onSelect(hit)
         })
-        c.addEventListener('dblclick', () => { this.rx = -0.3; this.ry = 0.35; this.targetZoom = 1.05 })
+        c.addEventListener('dblclick', () => { this.rx = -0.3; this.ry = 0.35; this.targetZoom = 0.95 })
         c.addEventListener('wheel', (e) => {
           e.preventDefault()
           this.targetZoom = clamp(this.targetZoom * Math.exp(-e.deltaY * 0.0012), 0.3, 2.5)
@@ -1046,7 +1050,11 @@ window.__ModuleLoader__.load({
     }
 
     async function api(path, opts) {
-      const res = await fetch(API + path, Object.assign({ credentials: 'same-origin' }, opts || {}))
+      const options = Object.assign({ credentials: 'same-origin' }, opts || {})
+      const headers = Object.assign({}, options.headers || {})
+      if (TOKEN) headers['x-mn-token'] = TOKEN
+      options.headers = headers
+      const res = await fetch(API + path, options)
       const json = await res.json().catch(() => null)
       if (!json) throw new Error('宿主没有返回 JSON（HTTP ' + res.status + '）')
       if (!json.ok) throw new Error(json.error || ('HTTP ' + res.status))
@@ -1072,6 +1080,8 @@ window.__ModuleLoader__.load({
       const [rebuilding, setRebuilding] = useState(false)
       const [settings, setSettings] = useState(loadSettings)
       const [settingsOpen, setSettingsOpen] = useState(false)
+      const [newCount, setNewCount] = useState(0)
+      const totalRef = useRef(null)
       const [showRaw, setShowRaw] = useState(false)
       const [sortBy, setSortBy] = useState('important')
       const [activePara, setActivePara] = useState(-1)
@@ -1082,7 +1092,6 @@ window.__ModuleLoader__.load({
       const engineRef = useRef(null)
       const stageRef = useRef(null)
       const tipRef = useRef(null)
-      const hoverRef = useRef(null)
 
       async function load() {
         setLoading(true)
@@ -1090,6 +1099,8 @@ window.__ModuleLoader__.load({
           const g = await api('/graph')
           setGraph(g)
           setError('')
+          setNewCount(0)
+          totalRef.current = null
         } catch (err) {
           setError(err.message || '加载失败')
         } finally {
@@ -1098,6 +1109,19 @@ window.__ModuleLoader__.load({
       }
 
       useEffect(() => { load() }, [])
+
+      useEffect(() => {
+        const timer = setInterval(async () => {
+          try {
+            const st = await api('/status')
+            const total = Number(st.memories) || 0
+            if (totalRef.current === null) { totalRef.current = total; return }
+            if (total > totalRef.current) setNewCount(total - totalRef.current)
+            totalRef.current = total
+          } catch { /* 轮询失败静默 */ }
+        }, 60000)
+        return () => clearInterval(timer)
+      }, [])
 
       const viewGraph = useMemo(() => filterGraph(graph, settings), [graph, settings.workspaces, settings.limit])
 
@@ -1120,7 +1144,6 @@ window.__ModuleLoader__.load({
         engineRef.current = engine
         engine.setOnSelect((node) => setSelected(node))
         engine.setOnHover((node) => {
-          hoverRef.current = node
           setHover(node)
           const tip = tipRef.current
           if (!tip) return
@@ -1236,7 +1259,6 @@ window.__ModuleLoader__.load({
       const q = query.trim()
       const sideOpen = Boolean(settings.side)
       const patch = (kv) => setSettings((v) => ({ ...v, ...kv }))
-      const BG_PRESETS = ['#070d18', '#000000', '#0b0714', '#06120f', '#170b0b', '#101a2e']
       const rangeRow = (label, key, min, max, step, fmt) => h('div', { className: 'mn-row' },
         h('span', null, label),
         h('input', {
@@ -1272,6 +1294,12 @@ window.__ModuleLoader__.load({
             h('span', null, h('i', null, stats.tags ?? 0), '标签'),
             graph?.builtAt ? h('span', { style: { opacity: 0.6 } }, '更新于 ' + formatTime(graph.builtAt)) : null
           ),
+          newCount > 0 ? h('button', {
+            className: 'mn-btn on',
+            onClick: () => { load() },
+            title: '索引里有新记忆，点击刷新星图',
+            style: { height: 28, padding: '0 10px' },
+          }, '↑ ' + newCount + ' 条新记忆') : null,
           h('button', {
             className: 'mn-btn' + (settingsOpen ? ' on' : ''),
             onClick: () => setSettingsOpen((v) => !v),
@@ -1335,7 +1363,7 @@ window.__ModuleLoader__.load({
             )
           ),
           h('div', { className: 'mn-stage', ref: stageRef },
-            h('canvas', { className: 'mn-canvas', ref: canvasRef }),
+            h('canvas', { className: 'mn-canvas', ref: canvasRef, style: { touchAction: 'none' } }),
             h('div', { className: 'mn-hint' }, '拖动旋转 · 滚轮缩放 · 点击星星看全文 · 双击复位'),
             h('div', { className: 'mn-tip', ref: tipRef }),
           )
@@ -1504,7 +1532,8 @@ window.__ModuleLoader__.load({
                 )
               ) : h('div', { className: 'mn-msg bot' },
                 h('div', { className: 'who' }, settings.botName || '助手'),
-                h('div', { className: 'mn-bubble', style: { opacity: 0.5 } }, '（这一轮没有助手回复）')
+                h('div', { className: 'mn-bubble', style: { opacity: 0.5 } },
+                  selected?.manual ? '（这条是你亲手记下的，没有助手回复）' : '（这一轮没有助手回复）')
               )
             ),
 
@@ -1589,8 +1618,35 @@ window.__ModuleLoader__.load({
       return s?.title || ''
     }
 
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = { error: null }
+      }
+
+      static getDerivedStateFromError(error) {
+        return { error }
+      }
+
+      componentDidCatch(error, info) {
+        try { console.error('[记忆星穹] 面板崩溃', error, info) } catch { /* 忽略 */ }
+      }
+
+      render() {
+        if (this.state.error) {
+          return h('div', { className: 'mn-crash' },
+            h('div', { className: 't' }, '记忆星穹遇到一个错误'),
+            h('div', { className: 'b' }, String(this.state.error?.message || this.state.error || '未知错误')),
+            h('button', { className: 'mn-btn', onClick: () => this.setState({ error: null }) }, '重试')
+          )
+        }
+        return this.props.children
+      }
+    }
+
     function Panel() {
-      return h('div', { style: { position: 'relative', width: '100%', height: '100%' } }, h(App))
+      return h('div', { style: { position: 'relative', width: '100%', height: '100%' } },
+        h(ErrorBoundary, null, h(App)))
     }
 
     return {
